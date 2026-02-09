@@ -147,6 +147,8 @@ FAISS index has been saved to ./faiss_index_store
     *   一个内部方法，负责搭建 FAISS 向量存储的“空框架”。
     *   它会根据指定的距离策略（默认为 L2 欧氏距离）初始化一个空的 FAISS 索引结构（如 `faiss.IndexFlatL2`）。
     *   同时，它也准备好了用于存储文档原文的 `docstore` 和用于连接 FAISS 索引与文档的 `index_to_docstore_id` 映射。
+    *   例如：FAISS 负责搜：找到 ID 为 1024。
+        docstore 负责取：根据 ID 1024 拿出原文：“张三是法外狂徒”。
     *   最后，它调用另一个内部方法 `__add` 来完成数据的填充。
 
 4.  **`__add` (填充数据)**:
