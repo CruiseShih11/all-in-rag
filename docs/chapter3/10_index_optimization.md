@@ -61,6 +61,14 @@ sentence_index = VectorStoreIndex(sentence_nodes)
 
 通过以上步骤，`SentenceWindowNodeParser` 最终返回一个 `TextNode` 列表。列表中的每个节点都代表一个独立的句子，其 `text` 属性用于精确检索，而其 `metadata` 中则“隐藏”了用于生成答案的丰富上下文窗口。
 
+`sentence_index = VectorStoreIndex(sentence_nodes)` 当你执行这条语句时，LlamaIndex 会在后台自动化完成以下三个重型任务：
+
+1. 向量化 (Embedding)：调用你预先配置的 Settings.embed_model，将每一个 sentence_nodes 中的文本内容输入模型，转化为一串高维浮点数（向量）。
+
+2. 构建内存数据库：将生成的向量与原始节点数据（包括 Metadata 中的 window 上下文）一一对应。
+
+3. 构建索引结构：在内存中建立一种便于快速检索的数据结构（默认是内存向量存储），使得后续进行语义搜索（Semantic Search）时，不需要暴力遍历，而是毫秒级定位。
+
 ```python
 # 2.2 常规分块索引 (基准)
 base_parser = SentenceSplitter(chunk_size=512)
