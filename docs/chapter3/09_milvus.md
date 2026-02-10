@@ -509,3 +509,45 @@ print(f"已删除 Collection: '{COLLECTION_NAME}'")
 通过上图可以看出，这个多模态检索引擎成功地理解了“一条龙”这个图文组合查询的意图，并从图库中找到了最相关的几张图片并进行排序。
 
 > [本节完整代码](https://github.com/datawhalechina/all-in-rag/blob/main/code/C3/04_multi_milvus.py)
+>
+> # 🐉 多模态图文检索系统全流程工程指南
+
+本指南涵盖了从环境搭建、模型推理到向量检索的完整工程链路，旨在指导如何构建基于 Milvus 与 Visualized BGE 的图文检索系统。
+
+---
+
+## 一、 系统架构全生命周期 (Mermaid)
+
+```mermaid
+graph TD
+    %% 第一阶段：基础设施
+    subgraph Infrastructure [1. 基础设施层]
+    Start[docker compose up -d] --> Milvus_Svr[Milvus Server 运行]
+    Milvus_Svr --> Client_Conn[MilvusClient 初始化连接]
+    end
+
+    %% 第二阶段：数据预处理
+    subgraph Data_Preprocessing [2. 数据预处理层]
+    Load_Model[加载 Visualized BGE 权重] --> Glob_Img[扫描本地数据集 glob]
+    Glob_Img --> Inference[模型推理: 图像/文本转向量]
+    end
+
+    %% 第三阶段：向量数据库构建
+    subgraph Milvus_Ops [3. 向量数据库构建]
+    Schema[定义 Schema: ID/Vector/Path] --> Create_Coll[创建 Collection]
+    Create_Coll --> Insert_Data[批量插入数据 Insert]
+    Insert_Data --> Build_Index[构建 HNSW 索引]
+    Build_Index --> Load_Mem[Load 加载至内存]
+    end
+
+    %% 第四阶段：检索应用
+    subgraph Search_Phase [4. 检索应用层]
+    Query_Input[用户输入: 纯文/纯图/混合] --> Gen_Vec[生成 Query Vector]
+    Gen_Vec --> Vector_Search[Milvus 近邻搜索]
+    Vector_Search --> Results[返回 Top-K 图片路径]
+    end
+
+    %% 连接逻辑
+    Client_Conn --> Load_Model
+    Inference --> Schema
+    Load_Mem --> Query_Input
