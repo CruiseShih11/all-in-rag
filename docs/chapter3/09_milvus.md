@@ -239,6 +239,7 @@ Milvus 提供了多种向量索引算法，以适应不同的应用场景。以�
 
 在本节中，我们将通过一个完整的示例，演示如何使用 Milvus 和 Visualized-BGE 模型构建一个端到端的图文多模态检索引擎。
 
+
 ### 4.1 初始化与工具定义
 
 首先导入所有必需的库，定义好模型路径、数据目录等常量。为了代码的整洁和复用，将 Visualized-BGE 模型的加载和编码逻辑封装在一个 `Encoder` 类中，并定义了一个 `visualize_results` 函数用于后续的结果可视化。
@@ -551,3 +552,46 @@ graph TD
     Client_Conn --> Load_Model
     Inference --> Schema
     Load_Mem --> Query_Input
+
+
+## 二、 核心流程详解与工程注意事项
+
+### 1. 基础设施层 (Infrastructure)
+* **环境启动**：通过 `docker compose up -d` 启动 Milvus。此时服务器处于“空载”状态，仅提供 API 监听。
+* **Client 连接**：`milvus_client = MilvusClient(uri=MILVUS_URI)` 是 Python 程序与服务端通信的唯一凭证。
+* **注意事项**：
+    * **持久化**：必须检查 `docker-compose.yml` 中的 `volumes` 配置，确保数据映射到物理磁盘，否则容器重启数据将全部丢失。
+    * **就绪检查**：Docker 启动后，Milvus 各组件（Query/Data/Index Node）建立内部连接需一定时间，建议代码中加入连接重试逻辑。
+
+### 2. 模型推理层 (Encoder)
+* **模型选择**：使用 **Visualized BGE**（约 3 亿参数）。该模型是典型的“双编码器”增强版，能够将视觉像素和文本语义映射到同一向量空间。
+* **核心功能**：
+    * `encoder.encode_image()`：将图片压缩为高维语义向量。
+    * `encoder.encode_query()`：支持单一文本输入或“图+文”混合输入，生成查询向量。
+* **注意事项**：
+    * **模型路径**：`MODEL_PATH` 必须指向正确的 `.pth` 权重文件。
+    * **显存分配**：模型在推理时会占用约 1-2GB 显存，若处理海量数据建议采用 Batch 批处理模式提高吞吐量。
+
+### 3. 向量数据库构建层 (Storage & Index)
+* **Schema 设计**：
+
+| 字段名 (Field) | 类型 (DataType) | 关键属性 | 作用说明 |
+| :--- | :--- | :--- | :--- |
+| id | INT64 | Primary Key / Auto ID | 数据的唯一标识符 |
+| vector | FLOAT_VECTOR | dim=512/768 | 核心特征向量，维度须与模型输出一致 |
+| image_path | VARCHAR | max_length=512 | 映射原图的路径，用于结果展示 |
+
+* **索引优化 (HNSW)**：
+    * **M (16)**：每个节点的最大邻居数，平衡内存占用与精度。
+    * **efConstruction (256)**：构建索引时的搜索范围，决定索引质量。
+    * **Metric (COSINE)**：使用余弦相似度，最能体现多模态语义的相似性。
+* **注意事项**：
+    * **加载内存 (Load)**：Milvus 采用内存计算。数据插入并创建索引后，必须显式调用 `load_collection()` 将数据推入内存，否则无法进行向量检索。
+
+### 4. 检索应用层 (Search)
+* **检索逻辑**：`milvus_client.search()` 将输入的查询向量与库中向量进行距离对比，通过 HNSW 快速定位 Top-K 邻居。
+* **检索模式对比**：
+    * **纯文搜索**：`image=None`，只传文本。模型利用其训练时的对齐能力，找寻语义最匹配的图。
+    * **纯图搜索**：`text=""`，只传图路径。寻找视觉风格或构图相似的图。
+* **注意事项**：
+    * **输出字段**：必须在 `output_fields` 中明确声明包含 `image_path`，否则返回结果中仅包含 ID 和距离（Score）。
